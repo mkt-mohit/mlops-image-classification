@@ -1,0 +1,71 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE and editor files
+.idea/
+.vscode/
+.sublime-workspace
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# DVC cache and temporary files
+# Note: DVC will automatically add data files to .gitignore when you use `dvc add`.
+.dvc/cache
+.dvc/tmp
+.dvc/plots
+
+# Data directories
+# It's good practice to explicitly ignore data directories.
+# DVC will handle tracking the data with corresponding .dvc files.
+/data/processed/
+/data/raw/
+
+# MLflow tracking
+# Local tracking logs and artifacts
+mlruns/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Test & coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Local config files
+*.local
+
+# Log files
+*.log
+
+# Model artifacts (if not tracked elsewhere)
+models/
+*.onnx
+*.pt
+*.pth
