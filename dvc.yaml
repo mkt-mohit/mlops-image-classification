@@ -1,0 +1,36 @@
+stages:
+  preprocess:
+    cmd: python src/data/preprocess.py
+    deps:
+      - src/data/preprocess.py
+      - data/raw
+    outs:
+      - data/processed
+    params:
+      - data.img_size
+      - data.train_split
+      - data.val_split
+      - data.test_split
+      - data.seed
+
+  train:
+    cmd: python src/training/train.py
+    deps:
+      - src/training/train.py
+      - src/models/cnn.py
+      - src/models/utils.py
+      - data/processed
+    outs:
+      - models/baseline_cnn.pt
+    metrics:
+      - metrics.json:
+          cache: false
+    params:
+      - model.learning_rate
+      - model.epochs
+      - model.num_classes
+      - model.dropout
+      - model.architecture
+      - data.batch_size
+      - data.num_workers
+      - data.seed
