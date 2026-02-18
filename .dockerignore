@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.Python
+.venv
+venv/
+.env
+env/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# MLflow & DVC
+mlruns/
+.dvc
+.mlflow
+
+# Data (keep only processed for inference)
+data/raw/
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Temporary
+*.tmp
+*.bak
+.DS_Store
