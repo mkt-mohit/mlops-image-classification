@@ -9,7 +9,6 @@ on:
 env:
   REGISTRY: gcr.io
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
   CLOUD_RUN_SERVICE: cats-dogs-api
   CLOUD_RUN_REGION: us-central1
 
@@ -59,17 +58,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
-          version: 'latest'
 
       - name: Configure Docker to use gcloud
         run: |
-          gcloud auth configure-docker
+          gcloud auth configure-docker ${{ env.REGISTRY }}
 
       - name: Build Docker image
         run: |
@@ -94,12 +93,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          version: 'latest'
 
       - name: Deploy to Cloud Run
         run: |
@@ -108,13 +108,15 @@ jobs:
             --region ${{ env.CLOUD_RUN_REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --port 8000
+            --port 8000 \
+            --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Get Cloud Run URL
         run: |
           SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
             --region ${{ env.CLOUD_RUN_REGION }} \
-            --format='value(status.url)')
+            --format='value(status.url)' \
+            --project ${{ env.GCP_PROJECT_ID }})
           echo "Cloud Run URL: $SERVICE_URL"
           echo "CLOUD_RUN_URL=$SERVICE_URL" >> $GITHUB_ENV
 
@@ -125,7 +127,7 @@ jobs:
 
       - name: Smoke test - Prediction endpoint exists
         run: |
-          curl -f ${{ env.CLOUD_RUN_URL }}/predict || true  # Expect 422 due to missing file (POST endpoint)
+          curl -f ${{ env.CLOUD_RUN_URL }}/predict || true
 
       - name: Post deployment status
         if: success()
