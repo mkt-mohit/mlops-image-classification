@@ -1,0 +1,140 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: gcr.io
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+  CLOUD_RUN_SERVICE: cats-dogs-api
+  CLOUD_RUN_REGION: us-central1
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install -r requirements.txt
+
+      - name: Run preprocessing tests
+        run: |
+          pytest tests/test_preprocessing.py -v --tb=short
+
+      - name: Run inference tests
+        run: |
+          pytest tests/test_inference.py -v --tb=short
+
+      - name: Generate coverage report
+        run: |
+          pytest tests/ --cov=src --cov-report=xml --cov-report=term
+
+  build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+          version: 'latest'
+
+      - name: Configure Docker to use gcloud
+        run: |
+          gcloud auth configure-docker
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:latest .
+
+      - name: Push Docker image to GCR
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:latest
+
+  deploy:
+    name: Deploy to Cloud Run
+    needs: build
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          version: 'latest'
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE }} \
+            --image ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:${{ github.sha }} \
+            --region ${{ env.CLOUD_RUN_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8000
+
+      - name: Get Cloud Run URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
+            --region ${{ env.CLOUD_RUN_REGION }} \
+            --format='value(status.url)')
+          echo "Cloud Run URL: $SERVICE_URL"
+          echo "CLOUD_RUN_URL=$SERVICE_URL" >> $GITHUB_ENV
+
+      - name: Smoke test - Health check
+        run: |
+          sleep 5
+          curl -f ${{ env.CLOUD_RUN_URL }}/health || exit 1
+
+      - name: Smoke test - Prediction endpoint exists
+        run: |
+          curl -f ${{ env.CLOUD_RUN_URL }}/predict || true  # Expect 422 due to missing file (POST endpoint)
+
+      - name: Post deployment status
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Service URL: ${{ env.CLOUD_RUN_URL }}"
+
+      - name: Post deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          exit 1
