@@ -7,8 +7,9 @@ on:
     branches: [ main ]
 
 env:
-  CLOUD_RUN_SERVICE: cats-dogs-api
-  CLOUD_RUN_REGION: us-central1
+  CLOUD_RUN_SERVICE: mlops-group113
+  CLOUD_RUN_REGION: asia-south1
+  GCP_PROJECT_ID: mtech-mlops-2024
 
 jobs:
   test:
@@ -72,15 +73,14 @@ jobs:
             --region ${{ env.CLOUD_RUN_REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --port 8000 \
-            --project ${{ secrets.GCP_PROJECT_ID }}
+            --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Get Cloud Run URL
         run: |
           SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
             --region ${{ env.CLOUD_RUN_REGION }} \
             --format='value(status.url)' \
-            --project ${{ secrets.GCP_PROJECT_ID }})
+            --project ${{ env.GCP_PROJECT_ID }})
           echo "Cloud Run URL: $SERVICE_URL"
           echo "CLOUD_RUN_URL=$SERVICE_URL" >> $GITHUB_ENV
 
