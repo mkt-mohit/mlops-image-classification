@@ -147,13 +147,13 @@ def preprocess(
             len(train_p), len(val_p), len(test_p),
         )
 
-        for split_name, split_paths in [
+        for split_name, paths_in_split in [
             ("train", train_p),
             ("val",   val_p),
             ("test",  test_p),
         ]:
             dest = processed_dir / split_name / class_name
-            n = save_images(split_paths, dest, img_size)
+            n = save_images(paths_in_split, dest, img_size)
             total_saved += n
 
     log.info("✅ Preprocessing complete. Total images saved: %d", total_saved)

@@ -4,11 +4,17 @@ src/training/train.py
 Training loop for Cats vs Dogs binary classification.
 Logs all params, metrics, and artefacts (confusion matrix, loss curve) to MLflow.
 Saves best model checkpoint to models/baseline_cnn.pt
+Registers model in MLflow Model Registry.
 """
 
 import json
 import logging
+import sys
 from pathlib import Path
+
+# ── Setup path BEFORE any src imports ──────────────────────────────────────────
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
 import matplotlib
 matplotlib.use("Agg")   # headless backend (no display needed)
@@ -36,7 +42,6 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-ROOT          = Path(__file__).resolve().parents[2]
 PARAMS_FILE   = ROOT / "params.yaml"
 PROCESSED_DIR = ROOT / "data" / "processed"
 MODEL_DIR     = ROOT / "models"
@@ -236,8 +241,25 @@ def train() -> None:
         plot_confusion_matrix(all_labels, all_preds, cm_plot)
         mlflow.log_artifact(str(cm_plot))
 
-        # 3. Log best model file
-        mlflow.log_artifact(str(MODEL_DIR / "baseline_cnn.pt"), artifact_path="model")
+        # 3. Log best model file using MLflow PyTorch format (for proper registration)
+        mlflow.pytorch.log_model(
+            pytorch_model=model,
+            artifact_path="model",
+            code_paths=[str(Path(__file__))],
+        )
+
+        # ── Register model in MLflow Model Registry ────────────────────────────
+        try:
+            model_uri = f"runs:/{run.info.run_id}/model"
+            registered_model = mlflow.register_model(
+                model_uri=model_uri,
+                name="baseline_cnn",
+            )
+            log.info("✅ Model registered in MLflow: %s (version %s)", 
+                     registered_model.name, registered_model.version)
+        except Exception as e:
+            log.warning("⚠️  Could not register model in registry: %s", str(e))
+            log.info("Model artifact still logged and available in MLflow")
 
         # ── DVC metrics file ──────────────────────────────────────────────────
         metrics = {

@@ -7,6 +7,7 @@ Training split gets augmentation; val/test get only normalisation.
 
 from pathlib import Path
 
+import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -89,6 +90,8 @@ def build_dataloaders(
     Returns a dict with 'train', 'val', 'test' DataLoaders.
     """
     loaders: dict[str, DataLoader] = {}
+    use_pin_memory = torch.cuda.is_available()
+    
     for split in ("train", "val", "test"):
         ds = CatsDogsDataset(processed_dir, split, img_size)
         loaders[split] = DataLoader(
@@ -96,6 +99,6 @@ def build_dataloaders(
             batch_size=batch_size,
             shuffle=(split == "train"),
             num_workers=num_workers,
-            pin_memory=True,
+            pin_memory=use_pin_memory,
         )
     return loaders
