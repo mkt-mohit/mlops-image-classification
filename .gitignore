@@ -119,9 +119,6 @@ data/raw/
 data/processed/
 
 # Model artifacts (tracked by DVC)
-models/*.pt
-models/*.h5
-models/*.pkl
 
 # MLflow
 mlruns/
