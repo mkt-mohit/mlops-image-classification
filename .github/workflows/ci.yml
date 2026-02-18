@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 env:
-  CLOUD_RUN_SERVICE: mlops-group113
+  GCP_PROJECT_ID: mlops-group113
   CLOUD_RUN_REGION: asia-south1
-  GCP_PROJECT_ID: mtech-mlops-2024
+  
 
 jobs:
   test:
@@ -68,19 +68,19 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE }} \
+          gcloud run deploy ${{ env.GCP_PROJECT_ID }} \
             --source . \
             --region ${{ env.CLOUD_RUN_REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --project ${{ env.GCP_PROJECT_ID }}
+          
 
       - name: Get Cloud Run URL
         run: |
           SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
             --region ${{ env.CLOUD_RUN_REGION }} \
             --format='value(status.url)' \
-            --project ${{ env.GCP_PROJECT_ID }})
+        
           echo "Cloud Run URL: $SERVICE_URL"
           echo "CLOUD_RUN_URL=$SERVICE_URL" >> $GITHUB_ENV
 
