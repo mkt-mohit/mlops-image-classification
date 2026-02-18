@@ -1,17 +1,24 @@
-# Use lightweight Python image
+# Use lightweight Python image (smaller than default)
 FROM python:3.10-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (required for Pillow and other libs)
-RUN apt-get update && apt-get install -y \
+# Install only essential system dependencies (no CUDA/GPU)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dependencies with --no-binary torch to get CPU-only version
+# This avoids downloading heavy CUDA libraries
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision && \
+    pip install --no-cache-dir \
+    -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
