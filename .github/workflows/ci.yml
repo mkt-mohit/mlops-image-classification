@@ -77,7 +77,7 @@ jobs:
 
       - name: Get Cloud Run URL
         run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
+          SERVICE_URL=$(gcloud run services describe ${{ env.GCP_PROJECT_ID }} \
             --region ${{ env.CLOUD_RUN_REGION }} \
             --format='value(status.url)' \
         
