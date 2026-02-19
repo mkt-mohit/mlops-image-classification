@@ -149,7 +149,7 @@ jobs:
           version: '3.8'
           services:
             image-classification:
-              image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
               container_name: image-classification-api
               ports:
                 - "8080:8080"
@@ -185,7 +185,7 @@ jobs:
           
           # Pull the latest image
           echo "📦 Pulling latest image..."
-          docker pull ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest || {
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || {
             echo "⚠️ Failed to pull image, attempting to configure auth..."
             echo "Note: Manual GCP authentication may be required"
           }

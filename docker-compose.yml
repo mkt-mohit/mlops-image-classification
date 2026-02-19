@@ -3,6 +3,7 @@ version: '3.8'
 services:
   image-classification:
     # Pull from GCP Container Registry
+    # Correct format: gcr.io/PROJECT_ID/IMAGE_NAME:TAG
     image: gcr.io/mlops-group113/mlops-group113/image-classification:latest
     container_name: image-classification-api
     
