@@ -8,7 +8,7 @@ on:
 
 env:
   GCP_PROJECT_ID: mlops-group113
-  IMAGE_NAME: mlops-group113/image-classification
+  IMAGE_NAME: mlops-group113/mlops-group113/image-classification
   REGISTRY: gcr.io/mlops-group113
 jobs:
   test:
@@ -77,19 +77,19 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest \
-                       -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
                        .
 
       - name: Push Docker image to GCP Container Registry
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Image build and push successful
         run: |
           echo "✅ Docker image built and pushed successfully!"
-          echo "Image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
   deploy-to-vm:
     name: Deploy to VM (M4)
@@ -126,15 +126,15 @@ jobs:
           if ! command -v docker &> /dev/null; then
             echo "📦 Installing Docker..."
             curl -fsSL https://get.docker.com -o get-docker.sh
-            sudo sh get-docker.sh
-            sudo usermod -aG docker $USER
+            sh get-docker.sh
+            usermod -aG docker $USER
           fi
           
           # Install Docker Compose if not already installed
           if ! command -v docker-compose &> /dev/null; then
             echo "📦 Installing Docker Compose..."
-            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
+            curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
           fi
           
           # Create deployment directory
@@ -185,18 +185,18 @@ jobs:
           
           # Pull the latest image
           echo "📦 Pulling latest image..."
-          sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || {
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || {
             echo "⚠️ Failed to pull image, attempting to configure auth..."
             echo "Note: Manual GCP authentication may be required"
           }
           
           # Stop and remove old container
           echo "🛑 Stopping old container..."
-          sudo docker-compose down || true
+          docker-compose down || true
           
           # Start new container with docker-compose
           echo "🚀 Starting new container..."
-          sudo docker-compose up -d
+          docker-compose up -d
           
           # Wait for container to be ready
           echo "⏳ Waiting for container to be healthy..."
