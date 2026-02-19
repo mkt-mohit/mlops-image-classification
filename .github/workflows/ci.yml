@@ -118,7 +118,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
           # Deploy via SSH
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@$VM_IP << 'DEPLOY_EOF'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no g2024aa05109@$VM_IP << 'DEPLOY_EOF'
           
           echo "🚀 Starting deployment on VM..."
           
@@ -127,7 +127,7 @@ jobs:
             echo "📦 Installing Docker..."
             curl -fsSL https://get.docker.com -o get-docker.sh
             sudo sh get-docker.sh
-            sudo usermod -aG docker root
+            sudo usermod -aG docker $USER
           fi
           
           # Install Docker Compose if not already installed
@@ -185,18 +185,18 @@ jobs:
           
           # Pull the latest image
           echo "📦 Pulling latest image..."
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || {
+          sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || {
             echo "⚠️ Failed to pull image, attempting to configure auth..."
             echo "Note: Manual GCP authentication may be required"
           }
           
           # Stop and remove old container
           echo "🛑 Stopping old container..."
-          docker-compose down || true
+          sudo docker-compose down || true
           
           # Start new container with docker-compose
           echo "🚀 Starting new container..."
-          docker-compose up -d
+          sudo docker-compose up -d
           
           # Wait for container to be ready
           echo "⏳ Waiting for container to be healthy..."
