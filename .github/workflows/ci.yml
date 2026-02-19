@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI Pipeline (M3)
 
 on:
   push:
@@ -8,12 +8,11 @@ on:
 
 env:
   GCP_PROJECT_ID: mlops-group113
-  CLOUD_RUN_SERVICE: mlops-group113
-  CLOUD_RUN_REGION: asia-south1
-
+  IMAGE_NAME: mlops-group113/image-classification
+  REGISTRY: gcr.io/mlops-group113
 jobs:
   test:
-    name: Run Tests
+    name: Run Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -44,8 +43,14 @@ jobs:
         run: |
           pytest tests/ --cov=src --cov-report=xml --cov-report=term
 
-  deploy:
-    name: Deploy to Cloud Run
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  build-and-push:
+    name: Build & Push Docker Image
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -66,35 +71,22 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy to Cloud Run
+      - name: Configure Docker authentication
         run: |
-          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE }} \
-            --source . \
-            --region ${{ env.CLOUD_RUN_REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --project ${{ env.GCP_PROJECT_ID }}
+          gcloud auth configure-docker gcr.io
 
-      - name: Get Cloud Run URL
+      - name: Build Docker image
         run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.CLOUD_RUN_SERVICE }} \
-            --region ${{ env.CLOUD_RUN_REGION }} \
-            --project ${{ env.GCP_PROJECT_ID }} \
-            --format='value(status.url)')
-          echo "Cloud Run URL: $SERVICE_URL"
-          echo "CLOUD_RUN_URL=$SERVICE_URL" >> $GITHUB_ENV
+          docker build -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest \
+                       -t ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+                       .
 
-      - name: Smoke test - Health check
+      - name: Push Docker image to GCP Container Registry
         run: |
-          sleep 5
-          curl -f ${{ env.CLOUD_RUN_URL }}/health || exit 1
+          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Smoke test - Predict endpoint
+      - name: Image build and push successful
         run: |
-          curl -f ${{ env.CLOUD_RUN_URL }}/docs || true
-
-      - name: Deployment successful
-        if: success()
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Service deployed to: ${{ env.CLOUD_RUN_URL }}"
+          echo "✅ Docker image built and pushed successfully!"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest"
