@@ -208,6 +208,9 @@ jobs:
         env:
           VM_IP: ${{ secrets.VM_IP }}
         run: |
+          # Install required packages for smoke tests
+          pip install Pillow requests
+          
           echo "🧪 Running smoke tests..."
           
           # Test health endpoint
