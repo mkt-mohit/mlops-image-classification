@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  image-classification:
+    # Pull from GCP Container Registry
+    image: gcr.io/mlops-group113/mlops-group113/image-classification:latest
+    container_name: image-classification-api
+    
+    # Port mapping: container port 8080 -> host port 8080
+    ports:
+      - "8080:8080"
+    
+    # Environment variables
+    environment:
+      - PORT=8080
+    
+    # Resource limits (appropriate for small VM)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

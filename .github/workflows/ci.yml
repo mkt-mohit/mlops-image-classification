@@ -1,4 +1,4 @@
-name: CI Pipeline (M3)
+name: CI/CD Pipeline (M3 & M4)
 
 on:
   push:
@@ -90,3 +90,202 @@ jobs:
         run: |
           echo "✅ Docker image built and pushed successfully!"
           echo "Image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest"
+
+  deploy-to-vm:
+    name: Deploy to VM (M4)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VM via SSH
+        env:
+          VM_IP: ${{ secrets.VM_IP }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          SSH_HOST_KEY: ${{ secrets.SSH_HOST_KEY }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          REGISTRY: ${{ env.REGISTRY }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_HOST_KEY" >> ~/.ssh/known_hosts
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          chmod 644 ~/.ssh/known_hosts
+
+          # Deploy via SSH
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@$VM_IP << 'DEPLOY_EOF'
+          
+          echo "🚀 Starting deployment on VM..."
+          
+          # Install Docker if not already installed
+          if ! command -v docker &> /dev/null; then
+            echo "📦 Installing Docker..."
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker root
+          fi
+          
+          # Install Docker Compose if not already installed
+          if ! command -v docker-compose &> /dev/null; then
+            echo "📦 Installing Docker Compose..."
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+          fi
+          
+          # Create deployment directory
+          mkdir -p ~/mlops-deployment
+          cd ~/mlops-deployment
+          
+          # Pull latest docker-compose.yml and smoke test script
+          echo "📥 Pulling deployment configuration..."
+          
+          # Create docker-compose.yml
+          cat > docker-compose.yml << 'COMPOSE_EOF'
+          version: '3.8'
+          services:
+            image-classification:
+              image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+              container_name: image-classification-api
+              ports:
+                - "8080:8080"
+              environment:
+                - PORT=8080
+              deploy:
+                resources:
+                  limits:
+                    cpus: '1'
+                    memory: 2G
+                  reservations:
+                    cpus: '0.5'
+                    memory: 1G
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+                interval: 30s
+                timeout: 5s
+                retries: 3
+                start_period: 40s
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+          COMPOSE_EOF
+          
+          # Authenticate with GCP (using gcloud from cloud-sdk if available)
+          echo "🔐 Configuring Docker authentication..."
+          if command -v gcloud &> /dev/null; then
+            gcloud auth configure-docker gcr.io --quiet
+          fi
+          
+          # Pull the latest image
+          echo "📦 Pulling latest image..."
+          docker pull ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest || {
+            echo "⚠️ Failed to pull image, attempting to configure auth..."
+            echo "Note: Manual GCP authentication may be required"
+          }
+          
+          # Stop and remove old container
+          echo "🛑 Stopping old container..."
+          docker-compose down || true
+          
+          # Start new container with docker-compose
+          echo "🚀 Starting new container..."
+          docker-compose up -d
+          
+          # Wait for container to be ready
+          echo "⏳ Waiting for container to be healthy..."
+          sleep 10
+          
+          DEPLOY_EOF
+
+      - name: Run Smoke Tests
+        env:
+          VM_IP: ${{ secrets.VM_IP }}
+        run: |
+          echo "🧪 Running smoke tests..."
+          
+          # Test health endpoint
+          echo "Test 1️⃣: Health Check"
+          for i in {1..5}; do
+            if curl -sf http://$VM_IP:8080/health > /dev/null; then
+              echo "✅ Health check passed"
+              break
+            fi
+            if [ $i -eq 5 ]; then
+              echo "❌ Health check failed after 5 attempts"
+              exit 1
+            fi
+            echo "Attempt $i/5 - retrying in 5 seconds..."
+            sleep 5
+          done
+          
+          # Test API documentation
+          echo ""
+          echo "Test 2️⃣: API Documentation"
+          if curl -sf http://$VM_IP:8080/docs > /dev/null; then
+            echo "✅ API documentation accessible"
+          else
+            echo "⚠️ API documentation not accessible (non-critical)"
+          fi
+          
+          # Test prediction endpoint (create simple test image)
+          echo ""
+          echo "Test 3️⃣: Prediction Endpoint"
+          python3 << 'PYTHON_EOF'
+          from PIL import Image
+          import requests
+          import json
+          
+          # Create a simple test image
+          img = Image.new('RGB', (224, 224), color='red')
+          img.save('/tmp/test_image.jpg')
+          
+          # Send prediction request
+          with open('/tmp/test_image.jpg', 'rb') as f:
+              files = {'file': f}
+              response = requests.post('http://${{ env.VM_IP }}:8080/predict', files=files)
+          
+          if response.status_code == 200:
+              data = response.json()
+              print("✅ Prediction endpoint working")
+              print(f"   Response: {json.dumps(data, indent=2)}")
+              
+              # Validate response structure
+              if 'class' in data and 'confidence' in data:
+                  print("✅ Response contains expected fields")
+              else:
+                  print("❌ Response missing expected fields")
+                  exit(1)
+          else:
+              print(f"❌ Prediction failed with status {response.status_code}")
+              print(response.text)
+              exit(1)
+          PYTHON_EOF
+
+      - name: Deployment Successful
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ M4: Deployment successful!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "🌐 Service URL: http://${{ secrets.VM_IP }}:8080"
+          echo "📊 API Docs: http://${{ secrets.VM_IP }}:8080/docs"
+          echo ""
+          echo "Health: http://${{ secrets.VM_IP }}:8080/health"
+          echo "Predict: POST http://${{ secrets.VM_IP }}:8080/predict (with image file)"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Deployment Failed
+        if: failure()
+        run: |
+          echo "❌ M4: Deployment or smoke tests failed!"
+          echo "Please check the logs above for details."
+          exit 1
