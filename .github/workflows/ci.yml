@@ -249,7 +249,7 @@ jobs:
           # Send prediction request
           with open('/tmp/test_image.jpg', 'rb') as f:
               files = {'file': f}
-              response = requests.post('http://${{ env.VM_IP }}:8080/predict', files=files)
+              response = requests.post('http://localhost:8080/predict', files=files)
           
           if response.status_code == 200:
               data = response.json()
