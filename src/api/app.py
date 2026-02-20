@@ -25,16 +25,6 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from torchvision import transforms
 
-# ── GCP Logging setup ──────────────────────────────────────────────────────────
-try:
-    from google.cloud import logging as cloud_logging
-    gcp_logging_client = cloud_logging.Client()
-    gcp_logger = gcp_logging_client.logger("image-classification-api")
-    use_gcp_logging = True
-except ImportError:
-    gcp_logger = None
-    use_gcp_logging = False
-
 # ── Setup path for src imports ─────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -44,7 +34,8 @@ from src.models.cnn import build_model
 # ── Logging setup ──────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 log = logging.getLogger(__name__)
 
@@ -132,42 +123,6 @@ app = FastAPI(
 )
 
 
-# ── Middleware for request/response logging ─────────────────────────────────────
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log HTTP requests and responses to GCP Cloud Logging."""
-    start_time = time.time()
-    
-    # Only log for non-health endpoints to reduce noise
-    if request.url.path != "/health":
-        if use_gcp_logging and gcp_logger:
-            gcp_logger.log_struct({
-                "severity": "INFO",
-                "event": "request_received",
-                "method": request.method,
-                "path": request.url.path,
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    response = await call_next(request)
-    
-    # Log response with latency
-    if request.url.path != "/health":
-        process_time = time.time() - start_time
-        if use_gcp_logging and gcp_logger:
-            gcp_logger.log_struct({
-                "severity": "INFO",
-                "event": "request_completed",
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "latency_ms": round(process_time * 1000, 2),
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    return response
-
-
 @app.on_event("startup")
 async def startup_event():
     """Load model on startup."""
@@ -241,42 +196,20 @@ async def predict(file: UploadFile = File(...)):
         }
 
         log.info(
-            "✅ Prediction: %s (%.2f%%) for %s",
+            "✅ Prediction: %s (%.2f%%) | confidence: %.4f | probabilities: cat=%.4f, dog=%.4f",
             predicted_class,
             confidence * 100,
-            file.filename,
+            confidence,
+            round(1 - prob, 4),
+            round(prob, 4),
         )
-        
-        # Log to GCP Cloud Logging
-        if use_gcp_logging and gcp_logger:
-            gcp_logger.log_struct({
-                "severity": "INFO",
-                "event": "prediction_completed",
-                "predicted_class": predicted_class,
-                "confidence": round(confidence, 4),
-                "probabilities": {
-                    "cat": round(1 - prob, 4),
-                    "dog": round(prob, 4),
-                },
-                "timestamp": datetime.now().isoformat()
-            })
 
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        log.error("Error during inference: %s", str(e))
-        
-        # Log error to GCP Cloud Logging
-        if use_gcp_logging and gcp_logger:
-            gcp_logger.log_struct({
-                "severity": "ERROR",
-                "event": "prediction_failed",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            })
-        
+        log.error("❌ Prediction failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 
