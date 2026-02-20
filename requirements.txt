@@ -21,9 +21,13 @@ pyyaml>=6.0
 # Data Validation
 pydantic>=2.0.0
 
+# Monitoring & Logging
+google-cloud-logging>=3.5.0
+
 # Optional: MLflow (if using model registry)
 mlflow>=2.10.0
 
 # Progress bars & utilities
 tqdm>=4.66.0
 python-dotenv>=1.0.0
+

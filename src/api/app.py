@@ -12,16 +12,28 @@ Endpoints:
 import io
 import logging
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import yaml
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 from torchvision import transforms
+
+# ── GCP Logging setup ──────────────────────────────────────────────────────────
+try:
+    from google.cloud import logging as cloud_logging
+    gcp_logging_client = cloud_logging.Client()
+    gcp_logger = gcp_logging_client.logger("image-classification-api")
+    use_gcp_logging = True
+except ImportError:
+    gcp_logger = None
+    use_gcp_logging = False
 
 # ── Setup path for src imports ─────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +132,42 @@ app = FastAPI(
 )
 
 
+# ── Middleware for request/response logging ─────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log HTTP requests and responses to GCP Cloud Logging."""
+    start_time = time.time()
+    
+    # Only log for non-health endpoints to reduce noise
+    if request.url.path != "/health":
+        if use_gcp_logging and gcp_logger:
+            gcp_logger.log_struct({
+                "severity": "INFO",
+                "event": "request_received",
+                "method": request.method,
+                "path": request.url.path,
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    response = await call_next(request)
+    
+    # Log response with latency
+    if request.url.path != "/health":
+        process_time = time.time() - start_time
+        if use_gcp_logging and gcp_logger:
+            gcp_logger.log_struct({
+                "severity": "INFO",
+                "event": "request_completed",
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "latency_ms": round(process_time * 1000, 2),
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    return response
+
+
 @app.on_event("startup")
 async def startup_event():
     """Load model on startup."""
@@ -198,6 +246,20 @@ async def predict(file: UploadFile = File(...)):
             confidence * 100,
             file.filename,
         )
+        
+        # Log to GCP Cloud Logging
+        if use_gcp_logging and gcp_logger:
+            gcp_logger.log_struct({
+                "severity": "INFO",
+                "event": "prediction_completed",
+                "predicted_class": predicted_class,
+                "confidence": round(confidence, 4),
+                "probabilities": {
+                    "cat": round(1 - prob, 4),
+                    "dog": round(prob, 4),
+                },
+                "timestamp": datetime.now().isoformat()
+            })
 
         return response
 
@@ -205,6 +267,16 @@ async def predict(file: UploadFile = File(...)):
         raise
     except Exception as e:
         log.error("Error during inference: %s", str(e))
+        
+        # Log error to GCP Cloud Logging
+        if use_gcp_logging and gcp_logger:
+            gcp_logger.log_struct({
+                "severity": "ERROR",
+                "event": "prediction_failed",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
+        
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 
