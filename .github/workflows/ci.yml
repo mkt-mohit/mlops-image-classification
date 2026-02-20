@@ -200,7 +200,7 @@ jobs:
           
           # Wait for container to be ready
           echo "⏳ Waiting for container to be healthy..."
-          sleep 10
+          sleep 40
           
           DEPLOY_EOF
 
