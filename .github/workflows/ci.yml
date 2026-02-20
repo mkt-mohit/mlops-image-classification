@@ -244,6 +244,10 @@ jobs:
           from PIL import Image
           import requests
           import json
+          import os
+          
+          # Get VM IP from environment
+          vm_ip = os.environ.get('VM_IP', 'localhost')
           
           # Create a simple test image
           img = Image.new('RGB', (224, 224), color='red')
@@ -252,7 +256,7 @@ jobs:
           # Send prediction request
           with open('/tmp/test_image.jpg', 'rb') as f:
               files = {'file': f}
-              response = requests.post('http://localhost:8080/predict', files=files)
+              response = requests.post(f'http://{vm_ip}:8080/predict', files=files)
           
           if response.status_code == 200:
               data = response.json()
